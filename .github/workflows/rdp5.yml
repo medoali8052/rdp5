@@ -1,4 +1,4 @@
-name: Free Windows RDP via Ngrok
+name: Free Windows RDP v3
 
 on:  
   workflow_dispatch:
@@ -25,21 +25,46 @@ jobs:
           $Password = ConvertTo-SecureString "GitHubRDP@2026" -AsPlainText -Force          
           Set-LocalUser -Name "runneradmin" -Password $Password
 
-      # 3. ربط الحساب وتشغيل النفق مباشرة في الواجهة للحفاظ على تشغيل السيرفر
-      - name: Start Ngrok Tunnel and Keep Alive        
+      # 3. تشغيل النفق بطريقة ذكية تمنع توقف السيرفر وتطبع الرابط مباشرة
+      - name: Start Ngrok Tunnel and Display Link        
         shell: powershell        
         run: |          
           # حفظ مفتاح التوثيق الخاص بكِ القادم من الـ Secrets
           & ngrok config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
           
-          Write-Host "==========================================================" -ForegroundColor Green
-          Write-Host "للحصول على رابط الـ RDP الخاص بكِ، يرجى فتح حسابك في موقع ngrok:" -ForegroundColor Yellow
-          Write-Host "https://dashboard.ngrok.com/tunnels/agents" -ForegroundColor Cyan
-          Write-Host "ستجدين الرابط هناك في قائمة الـ Tunnels النشطة مباشرة!" -ForegroundColor Yellow
-          Write-Host "==========================================================" -ForegroundColor Green
-          Write-Host "Username: runneradmin" -ForegroundColor Green
-          Write-Host "Password: GitHubRDP@2026" -ForegroundColor Green
-          Write-Host "==========================================================" -ForegroundColor Green
+          # بدء النفق وتوجيهه لملف نصي خارجي بدلاً من قراءة الـ API لمنع الخطأ السابق تماماً
+          Start-Process ngrok -ArgumentList "tcp 3389 --log=stdout" -RedirectStandardOutput "$env:TEMP\ngrok.log"
           
-          # تشغيل النفق مباشرة ليبقى السيرفر يعمل بشكل دائم ومستقر طوال فترة الـ Workflow
-          & ngrok tcp 3389
+          # الانتظار 10 ثوانٍ لضمان استقرار الاتصال بالمخدم وتوليد الرابط
+          Start-Sleep -Seconds 10
+          
+          # قراءة الرابط واستخراجه من ملف السجل مباشرة
+          $LogContent = Get-Content "$env:TEMP\ngrok.log" -Raw
+          if ($LogContent -match "url=(tcp://[^\s]+)") {
+              $Url = $Matches[1]
+              # إزالة بادئة tcp:// لتسهيل النسخ المباشر داخل برنامج الـ RDP
+              $CleanUrl = $Url -replace "tcp://", ""
+              
+              Write-Host "==========================================================" -ForegroundColor Green
+              Write-Host "RDP Link Generated Successfully!" -ForegroundColor Green
+              Write-Host "==========================================================" -ForegroundColor Green
+              Write-Host "RDP Address : $CleanUrl" -ForegroundColor Cyan
+              Write-Host "Username    : runneradmin" -ForegroundColor Cyan
+              Write-Host "Password    : GitHubRDP@2026" -ForegroundColor Cyan
+              Write-Host "==========================================================" -ForegroundColor Green
+          } else {
+              Write-Host "==========================================================" -ForegroundColor Red
+              Write-Host "[Error] Failed to generate Ngrok URL." -ForegroundColor Red
+              Write-Host "Please verify your NGROK_AUTH_TOKEN in GitHub Secrets." -ForegroundColor Red
+              Write-Host "==========================================================" -ForegroundColor Red
+              exit 1
+          }
+
+      # 4. الحفاظ على بقاء السيرفر حياً ونشطاً طوال الـ 6 ساعات دون إغلاق
+      - name: Keep Alive Loop        
+        shell: powershell        
+        run: |          
+          $hours = 6          
+          for ($i = 0; $i -lt ($hours * 60); $i++) {              
+              Start-Sleep -Seconds 60          
+          }
