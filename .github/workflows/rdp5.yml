@@ -29,17 +29,17 @@ jobs:
       - name: Start Ngrok Tunnel and Keep Alive        
         shell: powershell        
         run: |          
-          # حفظ مفتاح التوثيق الخاص بكِ
+          # حفظ مفتاح التوثيق الخاص بكِ القادم من الـ Secrets
           & ngrok config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
           
           Write-Host "==========================================================" -ForegroundColor Green
           Write-Host "للحصول على رابط الـ RDP الخاص بكِ، يرجى فتح حسابك في موقع ngrok:" -ForegroundColor Yellow
-          Write-Host "https://dashboard.ngrok.com/tunnels/agents" -ForegroundColor Cyon
+          Write-Host "https://dashboard.ngrok.com/tunnels/agents" -ForegroundColor Cyan
           Write-Host "ستجدين الرابط هناك في قائمة الـ Tunnels النشطة مباشرة!" -ForegroundColor Yellow
           Write-Host "==========================================================" -ForegroundColor Green
           Write-Host "Username: runneradmin" -ForegroundColor Green
           Write-Host "Password: GitHubRDP@2026" -ForegroundColor Green
           Write-Host "==========================================================" -ForegroundColor Green
           
-          # تشغيل النفق مباشرة ليبقى السيرفر يعمل بشكل دائم ومستقر
+          # تشغيل النفق مباشرة ليبقى السيرفر يعمل بشكل دائم ومستقر طوال فترة الـ Workflow
           & ngrok tcp 3389
