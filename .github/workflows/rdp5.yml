@@ -25,34 +25,36 @@ jobs:
           $Password = ConvertTo-SecureString "GitHubRDP@2026" -AsPlainText -Force          
           Set-LocalUser -Name "runneradmin" -Password $Password
 
-      # 3. تفعيل النفق والربط بـ Ngrok لتوجيه منفذ الـ RDP (3389)
+# 3. تفعيل النفق والربط بـ Ngrok لتوجيه منفذ الـ RDP (3389)
       - name: Connect Ngrok Tunnel        
         shell: powershell        
-        env:          
-          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}        
         run: |          
-          # إعداد مفتاح التوثيق
-          ngrok config add-authtoken $env:NGROK_AUTH_TOKEN
+          # حفظ مفتاح التوثيق
+          & ngrok config add-authtoken "${{ secrets.NGROK_AUTH_TOKEN }}"
           
-          # تشغيل النفق في الخلفية لتوجيه بروتوكول الـ RDP (TCP منفذ 3389)
-          Start-Process ngrok -ArgumentList "tcp 3389"
+          # تشغيل Ngrok داخل جوب منفصل ومستقل في الخلفية لضمان عدم إغلاقه
+          Start-Job -ScriptBlock { & ngrok tcp 3389 --log=stdout }
           
-          # الانتظار لثوانٍ حتى يتم الاتصال وتوليد الرابط
-          Start-Sleep -Seconds 5
+          # الانتظار 15 ثانية كاملة لضمان بدء الخدمة وتوليد الرابط
+          Start-Sleep -Seconds 15
           
-          # استخراج الرابط الخارجي المولد وعرضه في الـ Logs لتتمكن من الاتصال به
-          $Url = (Invoke-WebRequest -Uri "http://127.0.0.1:4040/api/tunnels" -UseBasicParsing | ConvertFrom-Json).tunnels.public_url
-          Write-Host "=========================================" -ForegroundColor Green
-          Write-Host "RDP Address: $Url" -ForegroundColor Green
-          Write-Host "Username: runneradmin" -ForegroundColor Green
-          Write-Host "Password: GitHubRDP@2026" -ForegroundColor Green
-          Write-Host "=========================================" -ForegroundColor Green
-
-      # 4. الحفاظ على تشغيل السيرفر وعدم إغلاقه فوراً
-      - name: Keep Alive Loop        
-        shell: powershell        
-        run: |          
-          $hours = 6          
-          for ($i = 0; $i -lt ($hours * 60); $i++) {              
-              Start-Sleep -Seconds 60          
+          # محاولة جلب الرابط من الـ API المحلي لـ Ngrok
+          try {
+              $Response = Invoke-WebRequest -Uri "http://127.0.0.1:4040/api/tunnels" -UseBasicParsing -TimeoutSec 15
+              $Url = ($Response | ConvertFrom-Json).tunnels.public_url
+              
+              if ($null -eq $Url -or $Url -eq "") { throw "Tunnel URL is empty" }
+              
+              Write-Host "=========================================" -ForegroundColor Green
+              Write-Host "RDP Address: $Url" -ForegroundColor Green
+              Write-Host "Username: runneradmin" -ForegroundColor Green
+              Write-Host "Password: GitHubRDP@2026" -ForegroundColor Green
+              Write-Host "=========================================" -ForegroundColor Green
+          }
+          catch {
+              Write-Host "=========================================" -ForegroundColor Red
+              Write-Host "[Error] Failed to connect to Ngrok API." -ForegroundColor Red
+              Write-Host "Please check if your Ngrok account is active or free limit reached." -ForegroundColor Red
+              Write-Host "=========================================" -ForegroundColor Red
+              exit 1
           }
